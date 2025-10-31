@@ -19,7 +19,7 @@ const getEnvVariable = (key: string, defaultValue: string = ""): string => {
 };
 
 // Environment Configuration
-export const PORT = getEnvVariable('PORT','5000');
+export const PORT = getEnvVariable('PORT','5001');
 export const NODE_ENV = getEnvVariable('NODE_ENV','development');
 export const DATABASE_URL = getEnvVariable('DATABASE_URL','');
 
@@ -32,7 +32,7 @@ export const RATE_LIMIT_MAX_REQUESTS = parseInt(getEnvVariable('RATE_LIMIT_MAX_R
 
 // Better Auth Configuration
 export const BETTER_AUTH_SECRET = getEnvVariable('BETTER_AUTH_SECRET','');
-export const BETTER_AUTH_URL = getEnvVariable('BETTER_AUTH_URL','http://localhost:5000');
+export const BETTER_AUTH_URL = getEnvVariable('BETTER_AUTH_URL','http://localhost:5001');
 export const FRONTEND_URL = getEnvVariable('FRONTEND_URL','http://localhost:3000');
 
 // OAuth Provider Configuration
@@ -43,7 +43,7 @@ export const GOOGLE_CLIENT_SECRET = getEnvVariable('GOOGLE_CLIENT_SECRET','');
 
 export const SMTP_HOST = getEnvVariable('SMTP_HOST','smtp.gmail.com');
 export const SMTP_PORT = parseInt(getEnvVariable('SMTP_PORT','587'), 10);
-export const SMTP_SECURE = getEnvVariable('SMTP_SECURE','false');
+export const SMTP_SECURE = getEnvVariable('SMTP_SECURE','false') === 'true';
 export const SMTP_USER = getEnvVariable('SMTP_USER','');
 export const SMTP_PASS = getEnvVariable('SMTP_PASS','');
 export const SMTP_FROM = getEnvVariable('SMTP_FROM','noreply@yourapp.com');

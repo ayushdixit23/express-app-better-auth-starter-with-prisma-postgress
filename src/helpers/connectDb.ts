@@ -4,7 +4,9 @@ import { DATABASE_URL } from "../utils/envConfig.js";
 // Create a single Prisma Client instance
 // Prisma automatically uses DATABASE_URL from environment variables
 const prisma = new PrismaClient({
-  log: process.env.NODE_ENV === "development" ? ["query", "error", "warn"] : ["error"],
+  log: process.env.NODE_ENV === "development" 
+    ? (process.env.PRISMA_LOG_QUERIES === "true" ? ["query", "error", "warn"] : ["error", "warn"])
+    : ["error"],
 });
 
 /**

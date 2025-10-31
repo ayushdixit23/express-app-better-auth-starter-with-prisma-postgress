@@ -1,7 +1,7 @@
-# Express App Template (TypeScript & MongoDB)
+# Express App Template (TypeScript & PostgreSQL)
 
 ## Overview
-A production-ready Express.js starter template with TypeScript and MongoDB. This template provides a solid foundation with modern best practices, class-based response system, comprehensive error handling, security enhancements, and graceful shutdown mechanisms.
+A production-ready Express.js starter template with TypeScript, PostgreSQL, and Better-Auth. This template provides a solid foundation with modern best practices, authentication system, comprehensive error handling, security enhancements, and graceful shutdown mechanisms.
 
 ---
 
@@ -10,11 +10,14 @@ A production-ready Express.js starter template with TypeScript and MongoDB. This
 ### Core Technologies
 - **TypeScript** (v5.9.3): Full type safety with modern JavaScript features
 - **Express.js** (v5.1.0): Fast, unopinionated web framework
-- **MongoDB**: NoSQL database with Mongoose ODM (v8.19.2)
+- **PostgreSQL**: Relational database with Prisma ORM (v6.18.0)
+- **Better-Auth** (v1.3.34): Modern authentication system with OAuth support
+- **Nodemailer** (v7.0.10): Email sending for verification and password reset
 - **Morgan** (v1.10.1): HTTP request logger
-- **Node.js** (v16 or higher recommended, v18+ for optimal performance)
+- **Node.js** (v18 or higher recommended)
 
 ### Production-Ready Features
+- ✅ **Better-Auth Integration**: Complete authentication with email/password, OAuth (GitHub, Google), 2FA
 - ✅ **Class-Based Response System**: Clean API responses with `SuccessResponse` and `ErrorResponse`
 - ✅ **Environment Validation**: Type-safe configuration with validation
 - ✅ **Security**: Helmet.js for security headers, CORS configuration
@@ -26,6 +29,9 @@ A production-ready Express.js starter template with TypeScript and MongoDB. This
 - ✅ **Request Logging**: Environment-based logging (dev/production)
 - ✅ **Async Handler**: Automatic error catching for async routes
 - ✅ **Modular Routes**: Clean, organized route structure
+- ✅ **Email Verification**: Automatic email verification on signup
+- ✅ **Password Reset**: Secure password reset via email
+- ✅ **Two-Factor Authentication**: TOTP-based 2FA support
 
 ---
 
@@ -34,7 +40,7 @@ A production-ready Express.js starter template with TypeScript and MongoDB. This
 ### Prerequisites
 - Node.js (v18 or higher recommended)
 - npm or yarn
-- MongoDB (local or remote instance)
+- PostgreSQL (local or remote instance)
 
 ### Installation
 
@@ -61,8 +67,8 @@ A production-ready Express.js starter template with TypeScript and MongoDB. This
    PORT=5000
    NODE_ENV=development
    
-   # MongoDB Configuration
-   MONGO_URI=mongodb://localhost:27017/your-database
+   # PostgreSQL Database Configuration (Prisma)
+   DATABASE_URL=postgresql://user:password@localhost:5432/mydb
    
    # CORS Configuration
    ALLOWED_ORIGINS=http://localhost:3000,http://localhost:3001
@@ -70,9 +76,44 @@ A production-ready Express.js starter template with TypeScript and MongoDB. This
    # Rate Limiting
    RATE_LIMIT_WINDOW_MS=900000
    RATE_LIMIT_MAX_REQUESTS=400
+   
+   # Better Auth Configuration
+   BETTER_AUTH_SECRET=your-super-secret-key-min-32-characters
+   BETTER_AUTH_URL=http://localhost:5000
+   FRONTEND_URL=http://localhost:3000
+   
+   # OAuth Provider Configuration (Optional)
+   GITHUB_CLIENT_ID=your-github-client-id
+   GITHUB_CLIENT_SECRET=your-github-client-secret
+   GOOGLE_CLIENT_ID=your-google-client-id
+   GOOGLE_CLIENT_SECRET=your-google-client-secret
+   
+   # Email Configuration (SMTP)
+   SMTP_HOST=smtp.gmail.com
+   SMTP_PORT=587
+   SMTP_SECURE=false
+   SMTP_USER=your-email@gmail.com
+   SMTP_PASS=your-app-password
+   SMTP_FROM=noreply@yourapp.com
    ```
 
-4. **Run the application**
+4. **Set up PostgreSQL database**
+   ```bash
+   # Create database (if not exists)
+   createdb mydatabase
+   
+   # Or via psql
+   psql -U postgres
+   CREATE DATABASE mydatabase;
+   ```
+
+5. **Run Prisma migrations**
+   ```bash
+   npm run db:migrate
+   ```
+   This will create all necessary tables for Better-Auth.
+
+6. **Run the application**
    ```bash
    npm run dev
    ```
@@ -84,8 +125,11 @@ A production-ready Express.js starter template with TypeScript and MongoDB. This
 ```
 express-app/
 ├── src/
-│   ├── helpers/              # Database and utility connections
-│   │   └── connectDb.ts      # MongoDB connection with event handlers
+│   ├── helpers/              # Database connections
+│   │   └── connectDb.ts      # PostgreSQL connection with Prisma
+│   ├── lib/                  # Core libraries
+│   │   ├── auth.ts           # Better-Auth configuration
+│   │   └── send-mail.ts      # Email sending utility
 │   ├── middlewares/          # Custom middleware
 │   │   ├── errorMiddleware.ts    # Error handling middleware
 │   │   ├── responseHandler.ts    # Success & Error response classes
@@ -98,6 +142,9 @@ express-app/
 │   │   ├── envConfig.ts      # Environment configuration
 │   │   └── gracefulShutdown.ts   # Shutdown handler
 │   └── index.ts              # Application entry point
+├── prisma/                   # Prisma schema and migrations
+│   ├── schema.prisma         # Database schema
+│   └── migrations/           # Migration files
 ├── dist/                     # Compiled JavaScript (generated)
 ├── env.example               # Environment variables template
 ├── package.json
@@ -116,7 +163,9 @@ express-app/
 import { SuccessResponse } from "../middlewares/responseHandler.js";
 
 router.get("/users/:id", asyncHandler(async (req, res) => {
-  const user = await User.findById(req.params.id);
+  const user = await prisma.user.findUnique({
+    where: { id: req.params.id }
+  });
   return new SuccessResponse("User retrieved successfully", user).send(res);
 }));
 ```
@@ -128,7 +177,7 @@ router.get("/users/:id", asyncHandler(async (req, res) => {
   "message": "User retrieved successfully",
   "statusCode": 200,
   "data": {
-    "id": 1,
+    "id": "1",
     "name": "John Doe"
   }
 }
@@ -152,22 +201,58 @@ if (!user) {
 }
 ```
 
-#### Status Codes
+---
+
+## 🔐 Better-Auth Endpoints
+
+All authentication endpoints are available under `/api/auth/*`:
+
+### Authentication
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `/api/auth/sign-up` | POST | Register new user |
+| `/api/auth/sign-in` | POST | Login user |
+| `/api/auth/sign-out` | POST | Logout user |
+| `/api/auth/session` | GET | Get current session |
+| `/api/auth/verify-email` | POST | Verify email address |
+
+### Password Management
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `/api/auth/forget-password` | POST | Request password reset |
+| `/api/auth/reset-password` | POST | Reset password with token |
+
+### Two-Factor Authentication
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `/api/auth/2fa/enable` | POST | Enable 2FA |
+| `/api/auth/2fa/verify` | POST | Verify 2FA code |
+| `/api/auth/2fa/disable` | POST | Disable 2FA |
+
+### OAuth (GitHub & Google)
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `/api/auth/sign-in/github` | GET | GitHub OAuth login |
+| `/api/auth/sign-in/google` | GET | Google OAuth login |
+| `/api/auth/callback/github` | GET | GitHub OAuth callback |
+| `/api/auth/callback/google` | GET | Google OAuth callback |
+
+### Example Usage
 ```typescript
-// 200 OK - Success
-new SuccessResponse("Operation successful", data).send(res);
+// Sign up
+POST /api/auth/sign-up
+{
+  "email": "user@example.com",
+  "password": "securepassword123",
+  "name": "John Doe"
+}
 
-// 201 Created - Resource created
-new SuccessResponse("User created", newUser, 201).send(res);
-
-// 400 Bad Request
-throw new ErrorResponse("Invalid input", 400);
-
-// 404 Not Found
-throw new ErrorResponse("Resource not found", 404);
-
-// 500 Internal Server Error
-throw new ErrorResponse("Server error", 500);
+// Sign in
+POST /api/auth/sign-in
+{
+  "email": "user@example.com",
+  "password": "securepassword123"
+}
 ```
 
 ---
@@ -208,26 +293,72 @@ throw new ErrorResponse("Server error", 500);
 |----------|-------------|---------|----------|
 | `PORT` | Server port | `5000` | No |
 | `NODE_ENV` | Environment (development/production) | `development` | No |
-| `MONGO_URI` | MongoDB connection string | - | Yes |
+| `DATABASE_URL` | PostgreSQL connection string | - | Yes |
 | `ALLOWED_ORIGINS` | CORS allowed origins (comma-separated) | `localhost:3000,localhost:3001` | No |
 | `RATE_LIMIT_WINDOW_MS` | Rate limit window in milliseconds | `900000` (15 min) | No |
 | `RATE_LIMIT_MAX_REQUESTS` | Max requests per window | `400` | No |
+| `BETTER_AUTH_SECRET` | Secret key for Better-Auth (min 32 chars) | - | Yes |
+| `BETTER_AUTH_URL` | Base URL for Better-Auth | `http://localhost:5000` | Yes |
+| `FRONTEND_URL` | Frontend URL for redirects | `http://localhost:3000` | Yes |
+| `SMTP_HOST` | SMTP server host | `smtp.gmail.com` | No |
+| `SMTP_PORT` | SMTP server port | `587` | No |
+| `SMTP_SECURE` | Use SSL/TLS | `false` | No |
+| `SMTP_USER` | SMTP username | - | No |
+| `SMTP_PASS` | SMTP password | - | No |
+| `SMTP_FROM` | Email from address | - | No |
+
+---
+
+## 🗄️ Database Management (Prisma)
+
+### Prisma Commands
+
+| Command | Description |
+|--------|-------------|
+| `npm run db:generate` | Generate Prisma Client |
+| `npm run db:push` | Push schema changes to database (prototyping) |
+| `npm run db:pull` | Pull schema from database |
+| `npm run db:migrate` | Create and apply migrations |
+| `npm run db:migrate:deploy` | Deploy migrations (production) |
+| `npm run db:migrate:status` | Check migration status |
+| `npm run db:migrate:reset` | Reset database and rerun migrations |
+| `npm run db:studio` | Open Prisma Studio (GUI) |
+| `npm run db:format` | Format Prisma schema |
+| `npm run db:validate` | Validate Prisma schema |
+| `npm run db:reset` | Force reset database |
+
+### Common Workflow
+
+```bash
+# 1. Update schema.prisma
+# 2. Create migration
+npm run db:migrate
+
+# 3. View database in browser
+npm run db:studio
+
+# 4. Generate Prisma Client (auto on migrate)
+npm run db:generate
+```
 
 ---
 
 ## 💻 Usage Examples
 
-### Creating a New Route
+### Creating a New Route with Prisma
 
 ```typescript
 import { Router } from "express";
 import asyncHandler from "../middlewares/tryCatch.js";
 import { SuccessResponse, ErrorResponse } from "../middlewares/responseHandler.js";
+import { prisma } from "../helpers/connectDb.js";
 
 const router = Router();
 
 router.get("/users/:id", asyncHandler(async (req, res) => {
-  const user = await User.findById(req.params.id);
+  const user = await prisma.user.findUnique({
+    where: { id: req.params.id }
+  });
   
   if (!user) {
     throw new ErrorResponse("User not found", 404);
@@ -239,18 +370,22 @@ router.get("/users/:id", asyncHandler(async (req, res) => {
 export default router;
 ```
 
-### Pagination Example
+### Pagination Example with Prisma
 
 ```typescript
 router.get("/posts", asyncHandler(async (req, res) => {
   const page = parseInt(req.query.page as string) || 1;
   const limit = parseInt(req.query.limit as string) || 10;
+  const skip = (page - 1) * limit;
   
-  const posts = await Post.find()
-    .skip((page - 1) * limit)
-    .limit(limit);
-  
-  const total = await Post.countDocuments();
+  const [posts, total] = await Promise.all([
+    prisma.post.findMany({
+      skip,
+      take: limit,
+      orderBy: { createdAt: 'desc' }
+    }),
+    prisma.post.count()
+  ]);
   
   const responseData = {
     posts,
@@ -275,6 +410,10 @@ router.get("/posts", asyncHandler(async (req, res) => {
 - **Helmet.js**: Sets security-related HTTP headers
 - **CORS**: Configurable Cross-Origin Resource Sharing
 - **Rate Limiting**: Prevents brute-force attacks (400 requests per 15 minutes)
+- **Better-Auth**: Secure authentication with bcrypt password hashing
+- **Email Verification**: Required email verification on signup
+- **Two-Factor Authentication**: TOTP-based 2FA support
+- **Secure Cookies**: HTTP-only, secure cookies for sessions
 - **Input Validation**: Type-safe request handling with TypeScript
 - **Error Sanitization**: Prevents information leakage
 
@@ -290,7 +429,7 @@ The application handles graceful shutdowns on:
 
 **Shutdown Process:**
 1. Stop accepting new requests
-2. Close database connections
+2. Close database connections (Prisma)
 3. Exit process cleanly
 
 ---
@@ -311,16 +450,18 @@ curl http://localhost:5000/health
 # Get data
 curl http://localhost:5000/api/data
 
-# Create user
-curl -X POST http://localhost:5000/api/users \
+# Sign up
+curl -X POST http://localhost:5000/api/auth/sign-up \
   -H "Content-Type: application/json" \
-  -d '{"name":"John Doe","email":"john@example.com"}'
+  -d '{"email":"test@example.com","password":"password123","name":"Test User"}'
+
+# Sign in
+curl -X POST http://localhost:5000/api/auth/sign-in \
+  -H "Content-Type: application/json" \
+  -d '{"email":"test@example.com","password":"password123"}'
 
 # Paginated posts
 curl http://localhost:5000/api/posts?page=1&limit=5
-
-# Error handling
-curl http://localhost:5000/api/error
 ```
 
 ---
@@ -345,6 +486,8 @@ COPY package*.json ./
 RUN npm ci --only=production
 COPY . .
 RUN npm run build
+RUN npx prisma generate
+RUN npx prisma migrate deploy
 EXPOSE 5000
 CMD ["npm", "start"]
 ```
@@ -354,7 +497,8 @@ CMD ["npm", "start"]
 ### Environment Setup
 - Set `NODE_ENV=production`
 - Use environment-specific `.env` files
-- Ensure MongoDB and other services are accessible
+- Ensure PostgreSQL and other services are accessible
+- Run migrations: `npm run db:migrate:deploy`
 
 ---
 
@@ -367,6 +511,8 @@ CMD ["npm", "start"]
 | `npm start` | Run production server |
 | `npm run clean` | Remove build artifacts |
 
+See [Database Management](#-database-management-prisma) section for Prisma commands.
+
 ---
 
 ## 🏗️ Architecture Highlights
@@ -374,6 +520,10 @@ CMD ["npm", "start"]
 ### Middleware Stack
 ```
 Request
+  ↓
+CORS
+  ↓
+Better-Auth Handler (/api/auth/*)
   ↓
 Security (Helmet)
   ↓
@@ -384,8 +534,6 @@ Logging (Morgan)
 Compression
   ↓
 Body Parsing
-  ↓
-CORS
   ↓
 Routes
   ↓
@@ -410,6 +558,30 @@ Error:
 
 ---
 
+## 🔑 Authentication Setup
+
+### OAuth Providers
+
+1. **GitHub OAuth**
+   - Go to https://github.com/settings/developers
+   - Create new OAuth App
+   - Set Authorization callback URL: `http://localhost:5000/api/auth/callback/github`
+   - Copy Client ID and Secret to `.env`
+
+2. **Google OAuth**
+   - Go to https://console.cloud.google.com/apis/credentials
+   - Create OAuth 2.0 Client ID
+   - Set Authorized redirect URIs: `http://localhost:5000/api/auth/callback/google`
+   - Copy Client ID and Secret to `.env`
+
+### Email Setup (Gmail)
+
+1. Enable 2-Step Verification in Google Account
+2. Generate App Password: https://myaccount.google.com/apppasswords
+3. Use App Password in `SMTP_PASS` (not your regular password)
+
+---
+
 ## 🤝 Contributing
 
 Contributions are welcome! Please feel free to submit a Pull Request.
@@ -425,6 +597,7 @@ This project is open source and available under the [ISC License](LICENSE).
 ## 🙏 Acknowledgments
 
 Built with best practices from the Node.js and Express.js communities.
+Powered by Prisma, Better-Auth, and PostgreSQL.
 
 ---
 
@@ -434,7 +607,8 @@ If you encounter any issues:
 1. Check the README.md for documentation
 2. Verify your `.env` file is properly configured
 3. Check the logs for detailed error messages
-4. Ensure MongoDB is running and accessible
+4. Ensure PostgreSQL is running and accessible
+5. Run `npm run db:migrate` if database schema is outdated
 
 ---
 
