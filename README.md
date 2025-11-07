@@ -32,6 +32,7 @@ A production-ready Express.js starter template with TypeScript, PostgreSQL, and 
 - ✅ **Email Verification**: Automatic email verification on signup
 - ✅ **Password Reset**: Secure password reset via email
 - ✅ **Two-Factor Authentication**: TOTP-based 2FA support
+- ✅ **Authentication Middleware**: Protect routes with `authenticateUser` or optional auth with `optionalAuth`
 
 ---
 
@@ -125,28 +126,31 @@ A production-ready Express.js starter template with TypeScript, PostgreSQL, and 
 ```
 express-app/
 ├── src/
-│   ├── helpers/              # Database connections
-│   │   └── connectDb.ts      # PostgreSQL connection with Prisma
-│   ├── lib/                  # Core libraries
+│   ├── app.ts                # Express app configuration & middleware setup
+│   ├── index.ts              # Application entry point (server startup)
+│   ├── config/                # Configuration files
+│   │   ├── database.ts       # PostgreSQL connection with Prisma
+│   │   └── env.ts            # Environment variables configuration
+│   ├── lib/                   # Core libraries
 │   │   ├── auth.ts           # Better-Auth configuration
+│   │   ├── email-templates.ts # Email template functions
 │   │   └── send-mail.ts      # Email sending utility
-│   ├── middlewares/          # Custom middleware
-│   │   ├── errorMiddleware.ts    # Error handling middleware
-│   │   ├── responseHandler.ts    # Success & Error response classes
+│   ├── middlewares/           # Custom middleware
+│   │   ├── authMiddleware.ts  # Authentication middleware (Better Auth)
+│   │   ├── errorMiddleware.ts # Error handling middleware
+│   │   ├── responseHandler.ts # Success & Error response classes
 │   │   └── tryCatch.ts       # Async error wrapper
 │   ├── routes/               # Route definitions
 │   │   ├── index.ts          # Main router
 │   │   ├── api.routes.ts     # API routes
 │   │   └── health.routes.ts  # Health check routes
-│   ├── utils/                # Utility functions
-│   │   ├── envConfig.ts      # Environment configuration
-│   │   └── gracefulShutdown.ts   # Shutdown handler
-│   └── index.ts              # Application entry point
-├── prisma/                   # Prisma schema and migrations
-│   ├── schema.prisma         # Database schema
-│   └── migrations/           # Migration files
-├── dist/                     # Compiled JavaScript (generated)
-├── env.example               # Environment variables template
+│   └── utils/                 # Utility functions
+│       └── gracefulShutdown.ts # Graceful shutdown handler
+├── prisma/                    # Prisma schema and migrations
+│   ├── schema.prisma          # Database schema
+│   └── migrations/            # Migration files
+├── dist/                      # Compiled JavaScript (generated)
+├── env.example                # Environment variables template
 ├── package.json
 ├── tsconfig.json
 └── README.md
@@ -351,7 +355,7 @@ npm run db:generate
 import { Router } from "express";
 import asyncHandler from "../middlewares/tryCatch.js";
 import { SuccessResponse, ErrorResponse } from "../middlewares/responseHandler.js";
-import { prisma } from "../helpers/connectDb.js";
+import { prisma } from "../config/database.js";
 
 const router = Router();
 
@@ -403,6 +407,64 @@ router.get("/posts", asyncHandler(async (req, res) => {
 }));
 ```
 
+### Using Authentication Middleware
+
+#### Protected Route (Required Authentication)
+
+```typescript
+import { Router } from "express";
+import asyncHandler from "../middlewares/tryCatch.js";
+import { authenticateUser } from "../middlewares/authMiddleware.js";
+import { SuccessResponse } from "../middlewares/responseHandler.js";
+
+const router = Router();
+
+// This route requires authentication
+router.get("/profile", authenticateUser, asyncHandler(async (req, res) => {
+  // req.user is available after authenticateUser middleware
+  const user = (req as any).user;
+  
+  return new SuccessResponse("Profile retrieved", {
+    id: user.id,
+    email: user.email,
+    name: user.name,
+  }).send(res);
+}));
+
+export default router;
+```
+
+#### Optional Authentication Route
+
+```typescript
+import { Router } from "express";
+import asyncHandler from "../middlewares/tryCatch.js";
+import { optionalAuth } from "../middlewares/authMiddleware.js";
+import { SuccessResponse } from "../middlewares/responseHandler.js";
+
+const router = Router();
+
+// This route works for both authenticated and unauthenticated users
+router.get("/posts", optionalAuth, asyncHandler(async (req, res) => {
+  const user = (req as any).user; // May be undefined
+  
+  const posts = await prisma.post.findMany({
+    // If user exists, show personalized content
+    where: user ? { userId: user.id } : { published: true },
+  });
+  
+  return new SuccessResponse("Posts retrieved", { posts, isAuthenticated: !!user }).send(res);
+}));
+
+export default router;
+```
+
+**Authentication Middleware Features:**
+- `authenticateUser`: Requires valid session, throws 401 if not authenticated
+- `optionalAuth`: Attaches user if authenticated, but doesn't block unauthenticated requests
+- Automatically attaches `req.user` with `{ id, email, name }` for authenticated users
+- Handles JWT errors and expired sessions gracefully
+
 ---
 
 ## 🛡️ Security Features
@@ -411,6 +473,7 @@ router.get("/posts", asyncHandler(async (req, res) => {
 - **CORS**: Configurable Cross-Origin Resource Sharing
 - **Rate Limiting**: Prevents brute-force attacks (400 requests per 15 minutes)
 - **Better-Auth**: Secure authentication with bcrypt password hashing
+- **Authentication Middleware**: Route protection with `authenticateUser` and `optionalAuth`
 - **Email Verification**: Required email verification on signup
 - **Two-Factor Authentication**: TOTP-based 2FA support
 - **Secure Cookies**: HTTP-only, secure cookies for sessions
@@ -521,19 +584,21 @@ See [Database Management](#-database-management-prisma) section for Prisma comma
 ```
 Request
   ↓
+Trust Proxy (production only)
+  ↓
 CORS
-  ↓
-Better-Auth Handler (/api/auth/*)
-  ↓
-Security (Helmet)
-  ↓
-Rate Limiting
   ↓
 Logging (Morgan)
   ↓
+Security (Helmet)
+  ↓
 Compression
   ↓
-Body Parsing
+Rate Limiting
+  ↓
+Better-Auth Handler (/api/auth/*)
+  ↓
+Body Parsing (JSON, URL-encoded)
   ↓
 Routes
   ↓
@@ -543,6 +608,8 @@ Route Handler
   ├─→ Success → SuccessResponse.send(res) → Client ✅
   └─→ Error → throw ErrorResponse → errorMiddleware → Client ❌
 ```
+
+**Note:** The Express app is configured in `src/app.ts` and initialized in `src/index.ts` (entry point).
 
 ### Response Flow
 ```
