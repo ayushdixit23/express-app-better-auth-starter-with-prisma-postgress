@@ -1,5 +1,5 @@
 import { Server } from "http";
-import { disconnectDb } from "../helpers/connectDb.js";
+import { disconnectDb } from "../config/database.js";
 
 /**
  * Gracefully shutdown the application

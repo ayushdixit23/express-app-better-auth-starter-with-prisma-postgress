@@ -21,7 +21,7 @@ const getEnvVariable = (key: string, defaultValue: string = ""): string => {
 // Environment Configuration
 export const PORT = getEnvVariable('PORT','5001');
 export const NODE_ENV = getEnvVariable('NODE_ENV','development');
-export const DATABASE_URL = getEnvVariable('DATABASE_URL','');
+export const DATABASE_URL = getEnvVariable('DATABASE_URL','postgresql://user:password@localhost:5432/mydb');
 
 // CORS Configuration
 export const ALLOWED_ORIGINS = getEnvVariable('ALLOWED_ORIGINS','http://localhost:3000,http://localhost:3001').split(',');
